@@ -3,7 +3,9 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
 package avilaos.estructuras;
-import modelo.Proceso;
+
+import java.util.Comparator;
+import interfaces.IConsumidor;
 
 /**
  *
@@ -12,10 +14,12 @@ import modelo.Proceso;
  */
 public class ListaEnlazada<T> {
     private Nodo<T> cabeza;
+    private Nodo<T> cola;
     private int tamano;
 
     public ListaEnlazada() {
         this.cabeza = null;
+        this.cola = null;
         this.tamano = 0;
     }
 
@@ -31,12 +35,10 @@ public class ListaEnlazada<T> {
         Nodo<T> nuevo = new Nodo<>(dato);
         if (estaVacia()) {
             cabeza = nuevo;
+            cola = nuevo;
         } else {
-            Nodo<T> actual = cabeza;
-            while (actual.getSiguiente() != null) {
-                actual = actual.getSiguiente();
-            }
-            actual.setSiguiente(nuevo);
+            cola.setSiguiente(nuevo);
+            cola = nuevo;
         }
         tamano++;
     }
@@ -45,6 +47,9 @@ public class ListaEnlazada<T> {
         Nodo<T> nuevo = new Nodo<>(dato);
         nuevo.setSiguiente(cabeza);
         cabeza = nuevo;
+        if (cola == null) {
+            cola = nuevo;
+        }
         tamano++;
     }
 
@@ -63,6 +68,9 @@ public class ListaEnlazada<T> {
         if (estaVacia()) return null;
         T dato = cabeza.getDato();
         cabeza = cabeza.getSiguiente();
+        if (cabeza == null) {
+            cola = null;
+        }
         tamano--;
         return dato;
     }
@@ -72,6 +80,9 @@ public class ListaEnlazada<T> {
 
         if (cabeza.getDato().equals(dato)) {
             cabeza = cabeza.getSiguiente();
+            if (cabeza == null) {
+                cola = null;
+            }
             tamano--;
             return true;
         }
@@ -79,6 +90,9 @@ public class ListaEnlazada<T> {
         Nodo<T> actual = cabeza;
         while (actual.getSiguiente() != null) {
             if (actual.getSiguiente().getDato().equals(dato)) {
+                if (actual.getSiguiente() == cola) {
+                    cola = actual;
+                }
                 actual.setSiguiente(actual.getSiguiente().getSiguiente());
                 tamano--;
                 return true;
@@ -90,44 +104,46 @@ public class ListaEnlazada<T> {
     
     public void vaciar() {
         cabeza = null;
+        cola = null;
         tamano = 0;
     }
     
-    // Algoritmos de Ordenamiento Específicos para Proceso
     
-    //ordena la lista por prioridad de menor a mayor
-    
-    public void ordenarPorPrioridad() {
-        if (tamano <= 1) return;
-
-        for (Nodo<T> i = cabeza; i != null; i = i.getSiguiente()) {
-            for (Nodo<T> j = i.getSiguiente(); j != null; j = j.getSiguiente()) {
-                if (i.getDato() instanceof Proceso p1 && j.getDato() instanceof Proceso p2) {
-                    if (p2.getPrioridad() < p1.getPrioridad()) {
-                        T temp = i.getDato();
-                        i.setDato(j.getDato());
-                        j.setDato(temp);
-                    }
-                }
-            }
+    public void paraCadaElemento(IConsumidor<T> accion) {
+        Nodo<T> actual = cabeza;
+        while (actual != null) {
+            accion.aceptar(actual.getDato());
+            actual = actual.getSiguiente();
         }
     }
-    
-    // ordena la lista por menor deadline (EDF)
-    
-    public void ordenarPorDeadline() {
-        if (tamano <= 1) return;
 
-        for (Nodo<T> i = cabeza; i != null; i = i.getSiguiente()) {
-            for (Nodo<T> j = i.getSiguiente(); j != null; j = j.getSiguiente()) {
-                if (i.getDato() instanceof Proceso p1 && j.getDato() instanceof Proceso p2) {
-                    if (p2.getDeadline() < p1.getDeadline()) {
-                        T temp = i.getDato();
-                        i.setDato(j.getDato());
-                        j.setDato(temp);
-                    }
+    public void ordenar(Comparator<T> comparador) {
+    if (tamano <= 1) return;
+
+        Nodo<T> ordenada = null;
+        Nodo<T> actual = cabeza;
+
+        while (actual != null) {
+            Nodo<T> siguiente = actual.getSiguiente();
+            if (ordenada == null || comparador.compare(actual.getDato(), ordenada.getDato()) < 0) {
+                actual.setSiguiente(ordenada);
+                ordenada = actual;
+            } else {
+                Nodo<T> temp = ordenada;
+                while (temp.getSiguiente() != null && comparador.compare(temp.getSiguiente().getDato(), actual.getDato()) <= 0) {
+                    temp = temp.getSiguiente();
                 }
+                actual.setSiguiente(temp.getSiguiente());
+                temp.setSiguiente(actual);
             }
+            actual = siguiente;
         }
-    }
+
+        cabeza = ordenada;
+        Nodo<T> temp = cabeza;
+        while (temp != null && temp.getSiguiente() != null) {
+            temp = temp.getSiguiente();
+        }
+        cola = temp;
+    }    
 }

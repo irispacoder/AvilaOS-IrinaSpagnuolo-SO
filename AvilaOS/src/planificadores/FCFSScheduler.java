@@ -13,7 +13,7 @@ import modelo.Proceso;
  */
 public class FCFSScheduler implements IScheduler{
     @Override
-    public Proceso seleccionarSiguiente(ListaEnlazada<Proceso> colaListos, Proceso procesoEnCPU, int quantumRestante){
+    public Proceso seleccionarSiguiente(ListaEnlazada<Proceso> colaListos, Proceso procesoEnCPU, int quantumRestante, int cicloActual){
         if (procesoEnCPU != null){
             return procesoEnCPU;
         }
@@ -23,7 +23,7 @@ public class FCFSScheduler implements IScheduler{
         return colaListos.eliminarPrimero();
     }
     @Override
-    public boolean debeDesalojar(Proceso procesoEnCPU, ListaEnlazada<Proceso> colaListos, int quantumRestante){
+    public boolean debeDesalojar(Proceso procesoEnCPU, ListaEnlazada<Proceso> colaListos, int quantumRestante, int cicloActual){
         return false; //fcfs nunca desaloja por eventos de llegada
     }
 }

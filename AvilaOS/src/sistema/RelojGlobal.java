@@ -80,14 +80,12 @@ public class RelojGlobal implements Runnable{
         }
     }
 
-    private synchronized void notificarSuscriptores() {
-        int total = suscriptores.getTamano();
-        for (int i = 0; i < total; i++) {
-            IClockListener suscriptor = suscriptores.obtener(i);
+    private void notificarSuscriptores() {
+        suscriptores.paraCadaElemento(suscriptor -> {
             if (suscriptor != null) {
                 suscriptor.onClockTick(cicloActual);
             }
-        }
+        });
     }
 
     // --- Getters y Setters ---

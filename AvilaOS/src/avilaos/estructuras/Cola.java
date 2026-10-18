@@ -40,4 +40,8 @@ public class Cola<T> {
     public boolean eliminar(T dato) {
         return lista.eliminar(dato);
     }
+    
+    public ListaEnlazada<T> getListaInterna() {
+        return lista;
+    }
 }
