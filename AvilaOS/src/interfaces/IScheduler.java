@@ -7,10 +7,9 @@ import avilaos.estructuras.ListaEnlazada;
 import modelo.Proceso;
 
 /**
- *
  * @author ispam
  */
 public interface IScheduler {
-    Proceso seleccionarSiguiente(ListaEnlazada<Proceso> colaListos, Proceso procesoEnCPU, int quantumRestante);
-    boolean debeDesalojar(Proceso procesoEnCPU, ListaEnlazada<Proceso> colaListos, int quantumRestante);
+    Proceso seleccionarSiguiente(ListaEnlazada<Proceso> colaListos, Proceso procesoEnCPU, int quantumRestante, int cicloActual);
+    boolean debeDesalojar(Proceso procesoEnCPU, ListaEnlazada<Proceso> colaListos, int quantumRestante, int cicloActual);
 }
