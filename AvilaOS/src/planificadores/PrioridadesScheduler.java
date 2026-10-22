@@ -16,32 +16,16 @@ public class PrioridadesScheduler implements IScheduler{
 
     @Override
     public Proceso seleccionarSiguiente(ListaEnlazada<Proceso> colaListos, Proceso procesoEnCPU, int quantumRestante, int cicloActual) {
-        if (colaListos == null || colaListos.estaVacia()) {
-            return procesoEnCPU;
-        }
-
+        if (procesoEnCPU != null) return procesoEnCPU;
+        if (colaListos == null || colaListos.estaVacia()) return null;
         colaListos.ordenar(Comparator.comparingInt(Proceso::getPrioridad));
-
-        if (procesoEnCPU != null) {
-            Proceso masPrioritario = colaListos.obtener(0);
-            if (masPrioritario.getPrioridad() < procesoEnCPU.getPrioridad()) {
-                colaListos.agregarAlFinal(procesoEnCPU);
-                colaListos.ordenar(Comparator.comparingInt(Proceso::getPrioridad));
-                return colaListos.eliminarPrimero();
-            }
-            return procesoEnCPU;
-        }
-
         return colaListos.eliminarPrimero();
     }
 
     @Override
     public boolean debeDesalojar(Proceso procesoEnCPU, ListaEnlazada<Proceso> colaListos, int quantumRestante, int cicloActual) {
-        if (procesoEnCPU == null || colaListos == null || colaListos.estaVacia()) {
-            return false;
-        }
+        if (procesoEnCPU == null || colaListos == null || colaListos.estaVacia()) return false;
         colaListos.ordenar(Comparator.comparingInt(Proceso::getPrioridad));
-        Proceso mejorEnCola = colaListos.obtener(0);
-        return mejorEnCola.getPrioridad() < procesoEnCPU.getPrioridad();
+        return colaListos.obtener(0).getPrioridad() < procesoEnCPU.getPrioridad();
     }
 }

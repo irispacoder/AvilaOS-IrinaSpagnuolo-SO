@@ -10,9 +10,8 @@ package enums;
  */
 public enum MotivoBloqueo {
     NINGUNO,
-    ESPERA_SEMAFORO_MUTEX,
-    ESPERA_SEMAFORO_VACIO,
-    ESPERA_SEMAFORO_LLENO,
-    TRANSITO_RED,
+    ESPERA_SEMAFORO,
+    LATENCIA_RED,
+    OPERACION_IO,
     ESPERA_MEMORIA
 }

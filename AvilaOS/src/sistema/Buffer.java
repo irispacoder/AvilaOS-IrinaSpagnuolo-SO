@@ -5,6 +5,8 @@
 package sistema;
 import avilaos.estructuras.ListaEnlazada;
 import enums.MotivoBloqueo;
+import enums.PasoBuffer;
+import enums.TipoProceso;
 import modelo.Proceso;
 
 /**
@@ -15,11 +17,9 @@ public class Buffer {
     private final String idBuffer;
     private final int capacidad;
     private final int idComputadorAnfitrion;
-
     private final Semaforo mutex;
     private final Semaforo lleno;
     private final Semaforo vacio;
-
     private int elementosActuales;
     private int totalElementosProducidos;
     private int totalElementosConsumidos;
@@ -28,76 +28,64 @@ public class Buffer {
         this.idBuffer = idBuffer;
         this.capacidad = capacidad;
         this.idComputadorAnfitrion = idComputadorAnfitrion;
-
         this.mutex = new Semaforo(idBuffer + "_MUTEX", 1);
         this.lleno = new Semaforo(idBuffer + "_LLENO", 0);
         this.vacio = new Semaforo(idBuffer + "_VACIO", capacidad);
-
         this.elementosActuales = 0;
         this.totalElementosProducidos = 0;
         this.totalElementosConsumidos = 0;
     }
 
-    public ResultadoOperacionBuffer producir(Proceso proceso, int latenciaRed) {
-        if (esAccesoRemoto(proceso) && !proceso.haCumplidoLatenciaRed(latenciaRed)) {
-            proceso.incrementarCiclosLatenciaPendientes();
-            return new ResultadoOperacionBuffer(false, new ListaEnlazada<>(), false);
+    public ResultadoPasoBuffer ejecutarCicloPasoBuffer(Proceso p, int cicloActual) {
+        if (p.getPasoBufferActual() == PasoBuffer.NINGUNO) {
+            p.setPasoBufferActual(PasoBuffer.WAIT_CONTEO);
         }
 
-        if (!vacio.semWait(proceso, MotivoBloqueo.ESPERA_SEMAFORO_VACIO)) {
-            return new ResultadoOperacionBuffer(false, new ListaEnlazada<>(), true);
+        switch (p.getPasoBufferActual()) {
+            case WAIT_CONTEO -> {
+                Semaforo semConteo = (p.getTipo() == TipoProceso.PRODUCTOR) ? vacio : lleno;
+                if (!semConteo.semWait(p, MotivoBloqueo.ESPERA_SEMAFORO)) {
+                    return new ResultadoPasoBuffer(false, true, null, "Proceso " + p.getNombre() + " bloqueado en semáforo " + semConteo.getNombre());
+                }
+                p.setPasoBufferActual(PasoBuffer.WAIT_MUTEX);
+                return new ResultadoPasoBuffer(true, false, null, "Proceso " + p.getNombre() + " ejecutó semWait en " + semConteo.getNombre());
+            }
+            case WAIT_MUTEX -> {
+                if (!mutex.semWait(p, MotivoBloqueo.ESPERA_SEMAFORO)) {
+                    return new ResultadoPasoBuffer(false, true, null, "Proceso " + p.getNombre() + " bloqueado en semáforo " + mutex.getNombre());
+                }
+                p.setPasoBufferActual(PasoBuffer.OPERACION);
+                return new ResultadoPasoBuffer(true, false, null, "Proceso " + p.getNombre() + " ejecutó semWait en " + mutex.getNombre());
+            }
+            case OPERACION -> {
+                synchronized (this) {
+                    if (p.getTipo() == TipoProceso.PRODUCTOR) {
+                        elementosActuales++;
+                        totalElementosProducidos++;
+                    } else {
+                        elementosActuales--;
+                        totalElementosConsumidos++;
+                    }
+                    p.incrementarElementosProcesados();
+                }
+                p.setPasoBufferActual(PasoBuffer.SIGNAL_MUTEX);
+                return new ResultadoPasoBuffer(true, false, null, "Proceso " + p.getNombre() + " realizó operación en Buffer " + idBuffer + " (Elem: " + elementosActuales + ")");
+            }
+            case SIGNAL_MUTEX -> {
+                Proceso desbloqueado = mutex.semSignal();
+                p.setPasoBufferActual(PasoBuffer.SIGNAL_CONTEO);
+                return new ResultadoPasoBuffer(true, false, desbloqueado, "Proceso " + p.getNombre() + " ejecutó semSignal en " + mutex.getNombre());
+            }
+            case SIGNAL_CONTEO -> {
+                Semaforo semConteo = (p.getTipo() == TipoProceso.PRODUCTOR) ? lleno : vacio;
+                Proceso desbloqueado = semConteo.semSignal();
+                p.reiniciarContadorCiclosBuffer();
+                return new ResultadoPasoBuffer(true, false, desbloqueado, "Proceso " + p.getNombre() + " ejecutó semSignal en " + semConteo.getNombre() + " y finalizó transacción de Buffer.");
+            }
+            default -> {
+                return new ResultadoPasoBuffer(true, false, null, "OK");
+            }
         }
-
-        if (!mutex.semWait(proceso, MotivoBloqueo.ESPERA_SEMAFORO_MUTEX)) {
-            return new ResultadoOperacionBuffer(false, new ListaEnlazada<>(), true);
-        }
-
-        synchronized (this) {
-            elementosActuales++;
-            totalElementosProducidos++;
-        }
-        proceso.incrementarElementosProcesados();
-        proceso.resetearLatenciaRed();
-
-        ListaEnlazada<Proceso> desbloqueados = new ListaEnlazada<>();
-        Proceso p1 = mutex.semSignal();
-        Proceso p2 = lleno.semSignal();
-
-        if (p1 != null) desbloqueados.agregarAlFinal(p1);
-        if (p2 != null) desbloqueados.agregarAlFinal(p2);
-
-        return new ResultadoOperacionBuffer(true, desbloqueados, false);
-    }
-
-    public ResultadoOperacionBuffer consumir(Proceso proceso, int latenciaRed) {
-        if (esAccesoRemoto(proceso) && !proceso.haCumplidoLatenciaRed(latenciaRed)) {
-            proceso.incrementarCiclosLatenciaPendientes();
-            return new ResultadoOperacionBuffer(false, new ListaEnlazada<>(), false);
-        }
-
-        if (!lleno.semWait(proceso, MotivoBloqueo.ESPERA_SEMAFORO_LLENO)) {
-            return new ResultadoOperacionBuffer(false, new ListaEnlazada<>(), true);
-        }
-
-        if (!mutex.semWait(proceso, MotivoBloqueo.ESPERA_SEMAFORO_MUTEX)) {
-            return new ResultadoOperacionBuffer(false, new ListaEnlazada<>(), true);
-        }
-
-        synchronized (this) {
-            elementosActuales--;
-            totalElementosConsumidos++;
-        }
-        proceso.incrementarElementosProcesados();
-        proceso.resetearLatenciaRed();
-
-        ListaEnlazada<Proceso> desbloqueados = new ListaEnlazada<>();
-        Proceso p1 = mutex.semSignal();
-        Proceso p2 = vacio.semSignal();
-
-        if (p1 != null) desbloqueados.agregarAlFinal(p1);
-        if (p2 != null) desbloqueados.agregarAlFinal(p2);
-
-        return new ResultadoOperacionBuffer(true, desbloqueados, false);
     }
 
     public boolean esAccesoRemoto(Proceso proceso) {
@@ -132,25 +120,30 @@ public class Buffer {
         return vacio;
     }
 
-    public static class ResultadoOperacionBuffer {
+    public static class ResultadoPasoBuffer {
         private final boolean exito;
-        private final ListaEnlazada<Proceso> procesosDesbloqueados;
-        private final boolean procesoQuedoBloqueado;
+        private final boolean quedoBloqueado;
+        private final Proceso procesoDesbloqueado;
+        private final String mensajeLog;
 
-        public ResultadoOperacionBuffer(boolean exito, ListaEnlazada<Proceso> procesosDesbloqueados, boolean procesoQuedoBloqueado) {
+        public ResultadoPasoBuffer(boolean exito, boolean quedoBloqueado, Proceso procesoDesbloqueado, String mensajeLog) {
             this.exito = exito;
-            this.procesosDesbloqueados = procesosDesbloqueados;
-            this.procesoQuedoBloqueado = procesoQuedoBloqueado;
+            this.quedoBloqueado = quedoBloqueado;
+            this.procesoDesbloqueado = procesoDesbloqueado;
+            this.mensajeLog = mensajeLog;
         }
 
         public boolean isExito() {
             return exito;
         }
-        public ListaEnlazada<Proceso> getProcesosDesbloqueados() {
-            return procesosDesbloqueados;
+        public boolean isQuedoBloqueado() {
+            return quedoBloqueado;
         }
-        public boolean isProcesoQuedoBloqueado() {
-            return procesoQuedoBloqueado;
+        public Proceso getProcesoDesbloqueado() {
+            return procesoDesbloqueado;
+        }
+        public String getMensajeLog() {
+            return mensajeLog;
         }
     }
 }

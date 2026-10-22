@@ -5,44 +5,45 @@
 package sistema;
 import avilaos.estructuras.ListaEnlazada;
 import interfaces.IClockListener;
+import java.util.concurrent.CountDownLatch;
 
 /**
  *
  * @author ispam
  */
 public class RelojGlobal implements Runnable{
-    private final ListaEnlazada<IClockListener> suscriptores;
+    private final ListaEnlazada<Computador> computadores;
     private int cicloActual;
-    private int duracionCicloMs; // Tiempo en milisegundos por ciclo
+    private int duracionCicloMs;
     private volatile boolean enEjecucion;
     private volatile boolean pausado;
     private Thread hiloReloj;
+    private IClockListener suscriptorClusterManager;
 
     public RelojGlobal(int duracionCicloMs) {
-        this.suscriptores = new ListaEnlazada<>();
+        this.computadores = new ListaEnlazada<>();
         this.cicloActual = 0;
         this.duracionCicloMs = duracionCicloMs;
         this.enEjecucion = false;
         this.pausado = false;
     }
 
-    public synchronized void agregarSuscriptor(IClockListener suscriptor) {
-        if (suscriptor != null) {
-            suscriptores.agregarAlFinal(suscriptor);
+    public synchronized void agregarComputador(Computador comp) {
+        if (comp != null) {
+            computadores.agregarAlFinal(comp);
         }
     }
 
-    public synchronized void removerSuscriptor(IClockListener suscriptor) {
-        if (suscriptor != null) {
-            suscriptores.eliminar(suscriptor);
-        }
+    public synchronized void setSuscriptorClusterManager(IClockListener listener) {
+        this.suscriptorClusterManager = listener;
     }
 
     public synchronized void iniciar() {
         if (!enEjecucion) {
             enEjecucion = true;
             pausado = false;
-            hiloReloj = new Thread(this, "RelojGlobalThread");
+            computadores.paraCadaElemento(Computador::iniciarHilo);
+            hiloReloj = new Thread(this, "Reloj Global Thread");
             hiloReloj.start();
         } else if (pausado) {
             pausado = false;
@@ -56,10 +57,11 @@ public class RelojGlobal implements Runnable{
     public synchronized void detener() {
         this.enEjecucion = false;
         this.pausado = false;
+        computadores.paraCadaElemento(Computador::detenerHilo);
         if (hiloReloj != null) {
             hiloReloj.interrupt();
+            this.cicloActual = 0;
         }
-        this.cicloActual = 0;
     }
 
     @Override
@@ -67,12 +69,10 @@ public class RelojGlobal implements Runnable{
         while (enEjecucion) {
             try {
                 Thread.sleep(duracionCicloMs);
-
                 if (!pausado) {
                     cicloActual++;
-                    notificarSuscriptores();
+                    ejecutarCicloParalelo();
                 }
-
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 enEjecucion = false;
@@ -80,35 +80,31 @@ public class RelojGlobal implements Runnable{
         }
     }
 
-    private void notificarSuscriptores() {
-        suscriptores.paraCadaElemento(suscriptor -> {
-            if (suscriptor != null) {
-                suscriptor.onClockTick(cicloActual);
-            }
-        });
+    private void ejecutarCicloParalelo() {
+        int numComputadores = computadores.getTamano();
+        if (numComputadores == 0) return;
+
+        CountDownLatch latch = new CountDownLatch(numComputadores);
+        computadores.paraCadaElemento(comp -> comp.dispararCicloParalelo(cicloActual, latch));
+
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        if (suscriptorClusterManager != null) {
+            suscriptorClusterManager.onClockTick(cicloActual);
+        }
     }
 
-    // --- Getters y Setters ---
-
-    public int getCicloActual() {
-        return cicloActual;
-    }
-
-    public int getDuracionCicloMs() {
-        return duracionCicloMs;
-    }
-
+    public int getCicloActual() { return cicloActual; }
+    public int getDuracionCicloMs() { return duracionCicloMs; }
     public synchronized void setDuracionCicloMs(int duracionCicloMs) {
         if (duracionCicloMs > 0) {
             this.duracionCicloMs = duracionCicloMs;
         }
     }
-
-    public boolean isEnEjecucion() {
-        return enEjecucion;
-    }
-
-    public boolean isPausado() {
-        return pausado;
-    }
+    public boolean isEnEjecucion() { return enEjecucion; }
+    public boolean isPausado() { return pausado; }
 }

@@ -43,14 +43,19 @@ public class Semaforo {
 
         if (valor <= 0 && !colaBloqueados.estaVacia()) {
             desbloqueado = colaBloqueados.desencolar();
-            if (desbloqueado != null) {
+            if (desbloqueado != null && desbloqueado.getEstado() != EstadoProcesos.TERMINADO) {
                 desbloqueado.setEstado(EstadoProcesos.LISTO);
                 desbloqueado.setMotivoBloqueo(MotivoBloqueo.NINGUNO);
+                return desbloqueado;
             }
         }
-        return desbloqueado;
+        return null;
     }
 
+    public synchronized boolean eliminarProceso(Proceso p) {
+        return colaBloqueados.eliminar(p);
+    }
+    
     public String getNombre() {
         return nombre;
     }
@@ -61,7 +66,7 @@ public class Semaforo {
     public synchronized ListaEnlazada<Proceso> obtenerCopiaColaBloqueados() {
         ListaEnlazada<Proceso> copia = new ListaEnlazada<>();
         ListaEnlazada<Proceso> interna = colaBloqueados.getListaInterna();
-        interna.paraCadaElemento(p -> copia.agregarAlFinal(p));
+        interna.paraCadaElemento(copia::agregarAlFinal);
         return copia;
     }
 }

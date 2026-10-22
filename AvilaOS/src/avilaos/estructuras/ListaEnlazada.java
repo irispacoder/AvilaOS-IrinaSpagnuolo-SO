@@ -23,15 +23,15 @@ public class ListaEnlazada<T> {
         this.tamano = 0;
     }
 
-    public boolean estaVacia() {
+    public synchronized boolean estaVacia() {
         return cabeza == null;
     }
 
-    public int getTamano() {
+    public synchronized int getTamano() {
         return tamano;
     }
 
-    public void agregarAlFinal(T dato) {
+    public synchronized void agregarAlFinal(T dato) {
         Nodo<T> nuevo = new Nodo<>(dato);
         if (estaVacia()) {
             cabeza = nuevo;
@@ -43,7 +43,7 @@ public class ListaEnlazada<T> {
         tamano++;
     }
     
-    public void agregarAlInicio(T dato) {
+    public synchronized void agregarAlInicio(T dato) {
         Nodo<T> nuevo = new Nodo<>(dato);
         nuevo.setSiguiente(cabeza);
         cabeza = nuevo;
@@ -53,7 +53,7 @@ public class ListaEnlazada<T> {
         tamano++;
     }
 
-    public T obtener(int indice) {
+    public synchronized T obtener(int indice) {
         if (indice < 0 || indice >= tamano) {
             throw new IndexOutOfBoundsException("Índice fuera de rango: " + indice);
         }
@@ -64,7 +64,7 @@ public class ListaEnlazada<T> {
         return actual.getDato();
     }
     
-    public T eliminarPrimero() {
+    public synchronized T eliminarPrimero() {
         if (estaVacia()) return null;
         T dato = cabeza.getDato();
         cabeza = cabeza.getSiguiente();
@@ -75,7 +75,7 @@ public class ListaEnlazada<T> {
         return dato;
     }
 
-    public boolean eliminar(T dato) {
+    public synchronized boolean eliminar(T dato) {
         if (estaVacia()) return false;
 
         if (cabeza.getDato().equals(dato)) {
@@ -102,14 +102,14 @@ public class ListaEnlazada<T> {
         return false;
     }
     
-    public void vaciar() {
+    public synchronized void vaciar() {
         cabeza = null;
         cola = null;
         tamano = 0;
     }
     
     
-    public void paraCadaElemento(IConsumidor<T> accion) {
+    public synchronized void paraCadaElemento(IConsumidor<T> accion) {
         Nodo<T> actual = cabeza;
         while (actual != null) {
             accion.aceptar(actual.getDato());
@@ -117,7 +117,7 @@ public class ListaEnlazada<T> {
         }
     }
 
-    public void ordenar(Comparator<T> comparador) {
+    public synchronized void ordenar(Comparator<T> comparador) {
     if (tamano <= 1) return;
 
         Nodo<T> ordenada = null;

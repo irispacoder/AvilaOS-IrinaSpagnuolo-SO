@@ -6,13 +6,15 @@ package modelo;
 import enums.EstadoProcesos;
 import enums.TipoProceso;
 import enums.MotivoBloqueo;
+import enums.PasoBuffer;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  *
  * @author ispam
  */
 public class Proceso {
-    private static int contadorIdGlobal = 1;
+    private static final AtomicInteger contadorIdGlobal = new AtomicInteger(1);
     
     private final int id;
     private final String nombre;
@@ -28,6 +30,7 @@ public class Proceso {
     private int pc;
     private int mar;
     private int tiempoBloqueado;
+    private int tiempoBloqueadoSemaforo;
     private int tiempoEsperaListos;
     private boolean memoriaAsignada;
     
@@ -41,10 +44,13 @@ public class Proceso {
     private int elementosRequeridos;
     private int elementosProcesados;
     private int ciclosLatenciaPendientes;
+    private int ciclosEjecutadosDesdeIO;
+    private int intervaloIOCiclos;
+    private PasoBuffer pasoBufferActual;
 
     public Proceso(String nombre, TipoProceso tipo, int prioridad, 
                    int memoriaRequerida, int deadline, int instruccionesTotales) {
-        this.id = contadorIdGlobal;
+        this.id = contadorIdGlobal.getAndIncrement();
         this.nombre = nombre;
         this.tipo = tipo;
         this.prioridad = prioridad;
@@ -58,6 +64,7 @@ public class Proceso {
         this.mar = 0;
         this.computadorAsignado = -1;
         this.tiempoBloqueado = 0;
+        this.tiempoBloqueadoSemaforo = 0;
         this.tiempoEsperaListos = 0;
         this.memoriaAsignada = false;
         this.ciclosLatenciaPendientes = 0;
@@ -65,6 +72,9 @@ public class Proceso {
         this.cicloPrimerEjecucion = -1;
         this.cicloFin = -1;
         this.contadorCiclosBuffer = 0;
+        this.ciclosEjecutadosDesdeIO = 0;
+        this.intervaloIOCiclos = 5;
+        this.pasoBufferActual = PasoBuffer.NINGUNO;
     }
     
     
@@ -72,7 +82,7 @@ public class Proceso {
     public Proceso(String nombre, TipoProceso tipo, int prioridad, 
                    int memoriaRequerida, int deadline, String idBuffer, 
                    int frecuenciaCiclos, int elementosRequeridos) {
-        this(nombre, tipo, prioridad, memoriaRequerida, deadline, elementosRequeridos * frecuenciaCiclos);
+        this(nombre, tipo, prioridad, memoriaRequerida, deadline, elementosRequeridos * (frecuenciaCiclos + 5));
         this.idBuffer = idBuffer;
         this.frecuenciaCiclos = frecuenciaCiclos;
         this.elementosRequeridos = elementosRequeridos;
@@ -85,7 +95,8 @@ public class Proceso {
             this.tiempoRestante--;
             this.pc++;
             this.mar++;
-            if (this.tipo == TipoProceso.PRODUCTOR || this.tipo == TipoProceso.CONSUMIDOR) {
+            this.ciclosEjecutadosDesdeIO++;
+            if ((this.tipo == TipoProceso.PRODUCTOR || this.tipo == TipoProceso.CONSUMIDOR) && pasoBufferActual == PasoBuffer.NINGUNO) {
                 this.contadorCiclosBuffer++;
             }
         }
@@ -93,11 +104,12 @@ public class Proceso {
     
     public boolean leTocaTocarBuffer() {
         if (tipo != TipoProceso.PRODUCTOR && tipo != TipoProceso.CONSUMIDOR) return false;
-        return contadorCiclosBuffer >= frecuenciaCiclos;
+        return contadorCiclosBuffer >= frecuenciaCiclos || pasoBufferActual != PasoBuffer.NINGUNO;
     }
     
     public void reiniciarContadorCiclosBuffer() {
         this.contadorCiclosBuffer = 0;
+        this.pasoBufferActual = PasoBuffer.NINGUNO;
     }
 
     public void decrementarDeadline() {
@@ -106,11 +118,44 @@ public class Proceso {
         }
     }
     
+    public boolean requiereIO() {
+        if (this.tipo == TipoProceso.IO_BOUND && this.tiempoRestante > 0 && this.ciclosEjecutadosDesdeIO >= intervaloIOCiclos) {
+            this.ciclosEjecutadosDesdeIO = 0;
+            return true;
+        }
+        return false;
+    }
+
+    public void resetearTiempoBloqueado() {
+        this.tiempoBloqueado = 0;
+    }
+    
     public String getInstruccionActual() {
         if (tiempoRestante <= 0) return "NOP (FINALIZADO)";
+        if (pasoBufferActual != PasoBuffer.NINGUNO) {
+            switch (pasoBufferActual) {
+                case WAIT_CONTEO -> {
+                    return "SEM_WAIT(" + (tipo == TipoProceso.PRODUCTOR ? "VACIO" : "LLENO") + ")";
+                }
+                case WAIT_MUTEX -> {
+                    return "SEM_WAIT(MUTEX)";
+                }
+                case OPERACION -> {
+                    return (tipo == TipoProceso.PRODUCTOR ? "PRODUCIR_ELEM [" : "CONSUMIR_ELEM [") + (elementosProcesados + 1) + "]";
+                }
+                case SIGNAL_MUTEX -> {
+                    return "SEM_SIGNAL(MUTEX)";
+                }
+                case SIGNAL_CONTEO -> {
+                    return "SEM_SIGNAL(" + (tipo == TipoProceso.PRODUCTOR ? "LLENO" : "VACIO") + ")";
+                }
+                default -> {
+                }
+            }
+        }
         switch (tipo) {
-            case PRODUCTOR: return "PRODUCIR_ELEM [" + (elementosProcesados + 1) + "]";
-            case CONSUMIDOR: return "CONSUMIR_ELEM [" + (elementosProcesados + 1) + "]";
+            case PRODUCTOR: return "PREPARAR_PRODUCCION_PC_" + pc;
+            case CONSUMIDOR: return "PREPARAR_CONSUMO_PC_" + pc;
             case IO_BOUND: return "IO_REQUEST_PC_" + pc;
             case CPU_BOUND: default: return "EXEC_INSTR_PC_" + pc;
         }
@@ -127,29 +172,47 @@ public class Proceso {
     public void incrementarTiempoBloqueado() {
         this.tiempoBloqueado++;
     }
-    
+    public void incrementarTiempoBloqueadoSemaforo() {
+        this.tiempoBloqueadoSemaforo++;
+    }
     public void incrementarTiempoEsperaListos() {
         this.tiempoEsperaListos++;
     }
-
     public boolean haCumplidoLatenciaRed(int latenciaConfigurada) {
         return ciclosLatenciaPendientes >= latenciaConfigurada;
     }
-
     public void incrementarCiclosLatenciaPendientes() {
         this.ciclosLatenciaPendientes++;
     }
-
     public void resetearLatenciaRed() {
         this.ciclosLatenciaPendientes = 0;
     }
+
+    public PasoBuffer getPasoBufferActual() {
+        return pasoBufferActual;
+    }
+    public void setPasoBufferActual(PasoBuffer paso) {
+        this.pasoBufferActual = paso;
+    }
+
+    
     
     //getters y setters
+    
+    public int getTiempoBloqueadoSemaforo() {
+        return tiempoBloqueadoSemaforo;
+    }
+    public int getIntervaloIOCiclos() {
+        return intervaloIOCiclos;
+    }
+    public void setIntervaloIOCiclos(int intervaloIOCiclos) {
+        this.intervaloIOCiclos = intervaloIOCiclos;
+    }
 
-    public int getId() { 
+    public int getId() {
         return id;
     }
-    public String getNombre() { 
+    public String getNombre() {
         return nombre;
     }
     public int getComputadorAsignado() {
