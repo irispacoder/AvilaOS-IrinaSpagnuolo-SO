@@ -75,12 +75,16 @@ public class ClusterManager implements IClockListener{
     }
 
     public synchronized void removerProcesoDeSemaforos(Proceso p) {
-        if (p == null) return;
-        buffers.paraCadaElemento(buf -> {
-            buf.getMutex().eliminarProceso(p);
-            buf.getLleno().eliminarProceso(p);
-            buf.getVacio().eliminarProceso(p);
-        });
+        if (p == null || buffers == null) return;
+    
+    for (int i = 0; i < buffers.getTamano(); i++) {
+        Buffer b = buffers.obtener(i);
+        if (b != null) {
+            if (b.getMutex() != null) b.getMutex().eliminarProceso(p);
+            if (b.getLleno() != null) b.getLleno().eliminarProceso(p);
+            if (b.getVacio() != null) b.getVacio().eliminarProceso(p);
+        }
+    }
     }
 
     @Override
@@ -111,12 +115,15 @@ public class ClusterManager implements IClockListener{
     }
 
     public Buffer buscarBufferPorId(String idBuffer) {
-        if (idBuffer == null) return null;
-        for (int i = 0; i < buffers.getTamano(); i++) {
-            Buffer buf = buffers.obtener(i);
-            if (buf.getIdBuffer().equalsIgnoreCase(idBuffer)) return buf;
+        if (idBuffer == null || buffers == null) return null;
+    
+    for (int i = 0; i < buffers.getTamano(); i++) {
+        Buffer b = buffers.obtener(i);
+        if (b != null && b.getIdBuffer() != null && b.getIdBuffer().equalsIgnoreCase(idBuffer)) {
+            return b;
         }
-        return null;
+    }
+    return null;
     }
 
     public synchronized void registrarLog(String mensaje) {

@@ -79,7 +79,9 @@ public class Buffer {
             case SIGNAL_CONTEO -> {
                 Semaforo semConteo = (p.getTipo() == TipoProceso.PRODUCTOR) ? lleno : vacio;
                 Proceso desbloqueado = semConteo.semSignal();
+                p.setPasoBufferActual(PasoBuffer.NINGUNO);
                 p.reiniciarContadorCiclosBuffer();
+                p.resetearLatenciaRed();
                 return new ResultadoPasoBuffer(true, false, desbloqueado, "Proceso " + p.getNombre() + " ejecutó semSignal en " + semConteo.getNombre() + " y finalizó transacción de Buffer.");
             }
             default -> {

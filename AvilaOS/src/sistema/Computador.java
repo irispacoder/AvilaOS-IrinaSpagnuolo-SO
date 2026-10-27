@@ -9,6 +9,8 @@ import enums.EstadoProcesos;
 import enums.ModoCPU;
 import enums.MotivoBloqueo;
 import enums.PoliticaPlanificacion;
+import enums.TipoProceso;
+import enums.PasoBuffer;
 import interfaces.IScheduler;
 import modelo.MetricasComputador;
 import modelo.Proceso;
@@ -237,18 +239,29 @@ public class Computador implements Runnable{
 
     private void evaluarDesbloqueosIO() {
         ListaEnlazada<Proceso> desbloqueados = new ListaEnlazada<>();
-        colaBloqueados.paraCadaElemento(p -> {
-            if (p.getMotivoBloqueo() == MotivoBloqueo.OPERACION_IO) {
-                if (p.getTiempoBloqueado() >= duracionBloqueoIOCiclos) {
-                    desbloqueados.agregarAlFinal(p);
-                }
-            } else if (p.getMotivoBloqueo() == MotivoBloqueo.LATENCIA_RED) {
-                if (p.haCumplidoLatenciaRed(clusterManager.getLatenciaRedCiclos())) {
-                    desbloqueados.agregarAlFinal(p);
-                }
+    
+    colaBloqueados.paraCadaElemento(p -> {
+        if (p.getMotivoBloqueo() == MotivoBloqueo.OPERACION_IO) {
+            if (p.getTiempoBloqueado() >= duracionBloqueoIOCiclos) {
+                desbloqueados.agregarAlFinal(p);
             }
-        });
-        desbloqueados.paraCadaElemento(this::reinsertarProcesoListo);
+        } else if (p.getMotivoBloqueo() == MotivoBloqueo.LATENCIA_RED) {
+            // Verifica que haya cumplido la latencia simulada
+            if (p.haCumplidoLatenciaRed(clusterManager.getLatenciaRedCiclos())) {
+                desbloqueados.agregarAlFinal(p);
+            }
+        }
+    });
+
+    desbloqueados.paraCadaElemento(p -> {
+        if (p.getMotivoBloqueo() == MotivoBloqueo.LATENCIA_RED) {
+            // Avanza la máquina de estados del buffer para que intente tomar el mutex
+            if (p.getPasoBufferActual() == PasoBuffer.WAIT_CONTEO || p.getPasoBufferActual() == PasoBuffer.NINGUNO) {
+                p.setPasoBufferActual(PasoBuffer.WAIT_MUTEX);
+            }
+        }
+        reinsertarProcesoListo(p);
+    });
     }
 
     private void evaluarPlanificacion(int cicloActual) {
@@ -278,10 +291,14 @@ public class Computador implements Runnable{
                 Buffer target = clusterManager.buscarBufferPorId(procesoEnCPU.getIdBuffer());
                 if (target != null) {
                     boolean esRemoto = target.esAccesoRemoto(procesoEnCPU);
-                    if (esRemoto && !procesoEnCPU.haCumplidoLatenciaRed(clusterManager.getLatenciaRedCiclos())) {
-                        desalojarProcesoPorBloqueo(MotivoBloqueo.LATENCIA_RED);
-                        registrarLogLocal("Ciclo " + cicloActual + ": Proceso " + procesoEnCPU.getNombre() + " desalojado a BLOQUEADO por Latencia de Red (" + clusterManager.getLatenciaRedCiclos() + " ciclos).");
-                        return;
+                    if (esRemoto) {
+                        if (!procesoEnCPU.haCumplidoLatenciaRed(clusterManager.getLatenciaRedCiclos())) {
+                            String nombreProc = procesoEnCPU.getNombre();
+                            desalojarProcesoPorBloqueo(MotivoBloqueo.LATENCIA_RED);
+                            registrarLogLocal("Ciclo " + cicloActual + ": Proceso " + nombreProc + " desalojado a BLOQUEADO por Latencia de Red (" + clusterManager.getLatenciaRedCiclos() + " ciclos).");
+                            return;
+                        }
+                        
                     }
 
                     modoCPU = ModoCPU.SISTEMA_OPERATIVO;
@@ -292,6 +309,11 @@ public class Computador implements Runnable{
                     registrarLogLocal("Ciclo " + cicloActual + ": [MODO SO] " + resPaso.getMensajeLog());
 
                     if (resPaso.getProcesoDesbloqueado() != null) {
+                        Proceso desb = resPaso.getProcesoDesbloqueado();
+                        if (desb.getPasoBufferActual() == PasoBuffer.WAIT_CONTEO) {
+                            desb.setPasoBufferActual(PasoBuffer.WAIT_MUTEX);
+                        }
+                        
                         Computador compDueno = clusterManager.buscarComputadorPorId(resPaso.getProcesoDesbloqueado().getComputadorAsignado());
                         if (compDueno != null) {
                             compDueno.reinsertarProcesoListo(resPaso.getProcesoDesbloqueado());
@@ -323,18 +345,24 @@ public class Computador implements Runnable{
     }
 
     private void evaluarFinalizacionOExpiracion(int cicloActual) {
-        if (procesoEnCPU == null) return;
+       if (procesoEnCPU == null) return;
+       boolean completoElementos = (procesoEnCPU.getTipo() == TipoProceso.PRODUCTOR || procesoEnCPU.getTipo() == TipoProceso.CONSUMIDOR)
+                && procesoEnCPU.getElementosProcesados() >= procesoEnCPU.getElementosRequeridos()
+                && procesoEnCPU.getPasoBufferActual() == PasoBuffer.NINGUNO;
 
         if (procesoEnCPU.haExpiradoDeadline()) {
-            registrarLogLocal("Ciclo " + cicloActual + ": [EXPULSIÓN EN CPU] Proceso " + procesoEnCPU.getNombre() + " (ID: " + procesoEnCPU.getId() + ") superó su deadline.");
+            String nombreProc = procesoEnCPU.getNombre();
+            int idProc = procesoEnCPU.getId();
             Proceso exp = procesoEnCPU;
             procesoEnCPU = null;
+            registrarLogLocal("Ciclo " + cicloActual + ": [EXPULSIÓN EN CPU] Proceso " + nombreProc + " (ID: " + idProc + ") superó su deadline.");
             finalizarProcesoExpirado(exp, cicloActual);
-        } else if (procesoEnCPU.getTiempoRestante() <= 0) {
+        } else if (procesoEnCPU.getTiempoRestante() <= 0 || completoElementos) {
             finalizarProcesoNormal(cicloActual);
         } else if (procesoEnCPU.requiereIO()) {
             desalojarProcesoPorBloqueo(MotivoBloqueo.OPERACION_IO);
         }
+    
     }
 
     private void finalizarProcesoNormal(int cicloActual) {
@@ -364,8 +392,6 @@ public class Computador implements Runnable{
             colaBloqueados.eliminar(proceso);
             proceso.setEstado(EstadoProcesos.LISTO);
             proceso.setMotivoBloqueo(MotivoBloqueo.NINGUNO);
-            proceso.resetearTiempoBloqueado();
-            proceso.resetearLatenciaRed();
             colaListos.agregarAlFinal(proceso);
         }
     }
