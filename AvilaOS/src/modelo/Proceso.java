@@ -82,7 +82,7 @@ public class Proceso {
     public Proceso(String nombre, TipoProceso tipo, int prioridad, 
                    int memoriaRequerida, int deadline, String idBuffer, 
                    int frecuenciaCiclos, int elementosRequeridos) {
-        this(nombre, tipo, prioridad, memoriaRequerida, deadline, elementosRequeridos * (frecuenciaCiclos + 5));
+        this(nombre, tipo, prioridad, memoriaRequerida, deadline, Integer.MAX_VALUE);
         this.idBuffer = idBuffer;
         this.frecuenciaCiclos = frecuenciaCiclos;
         this.elementosRequeridos = elementosRequeridos;
@@ -104,6 +104,9 @@ public class Proceso {
     
     public boolean leTocaTocarBuffer() {
         if (tipo != TipoProceso.PRODUCTOR && tipo != TipoProceso.CONSUMIDOR) return false;
+        if (elementosProcesados >= elementosRequeridos && pasoBufferActual == PasoBuffer.NINGUNO) {
+        return false;
+    }
         return contadorCiclosBuffer >= frecuenciaCiclos || pasoBufferActual != PasoBuffer.NINGUNO;
     }
     

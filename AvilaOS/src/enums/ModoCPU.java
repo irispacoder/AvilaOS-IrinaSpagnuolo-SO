@@ -9,6 +9,6 @@ package enums;
  * @author ispam
  */
 public enum ModoCPU {
-    USUARIO,
-    SISTEMA_OPERATIVO
+    USUARIO,//modo usuario
+    SISTEMA_OPERATIVO //modo kernel
 }
