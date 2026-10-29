@@ -45,6 +45,8 @@ public class PanelGraficoMetricas extends JPanel{
         );
 
         XYPlot plot = chart.getXYPlot();
+        org.jfree.chart.axis.NumberAxis domainAxis = (org.jfree.chart.axis.NumberAxis) plot.getDomainAxis();
+        domainAxis.setNumberFormatOverride(new java.text.DecimalFormat("0"));
         plot.getRangeAxis().setRange(0.0, 100.0);
         plot.setBackgroundPaint(Color.WHITE);
         plot.setDomainGridlinePaint(Color.LIGHT_GRAY);

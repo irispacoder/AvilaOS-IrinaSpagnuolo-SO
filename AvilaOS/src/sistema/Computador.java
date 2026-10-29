@@ -19,6 +19,7 @@ import planificadores.FCFSScheduler;
 import planificadores.PrioridadesScheduler;
 import planificadores.RRScheduler;
 import sistema.Buffer.ResultadoPasoBuffer;
+import interfaces.IClockListener;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
@@ -27,7 +28,7 @@ import java.util.concurrent.Semaphore;
  *
  * @author ispam
  */
-public class Computador implements Runnable{
+public class Computador implements Runnable, IClockListener{
     private final int idComputador;
     private final String nombre;
     private final int ramTotal;
@@ -97,8 +98,13 @@ public class Computador implements Runnable{
     }
 
     public void dispararCicloParalelo(int cicloActual, CountDownLatch latch) {
-        this.cicloActualPaso = cicloActual;
         this.latchSincronizacionReloj = latch;
+        onClockTick(cicloActual);
+    }
+    
+    @Override
+    public void onClockTick(int cicloActual) {
+        this.cicloActualPaso = cicloActual;
         this.semaforoPasoCiclo.release();
     }
 
@@ -254,12 +260,6 @@ public class Computador implements Runnable{
     });
 
     desbloqueados.paraCadaElemento(p -> {
-        if (p.getMotivoBloqueo() == MotivoBloqueo.LATENCIA_RED) {
-            // Avanza la máquina de estados del buffer para que intente tomar el mutex
-            if (p.getPasoBufferActual() == PasoBuffer.WAIT_CONTEO || p.getPasoBufferActual() == PasoBuffer.NINGUNO) {
-                p.setPasoBufferActual(PasoBuffer.WAIT_MUTEX);
-            }
-        }
         reinsertarProcesoListo(p);
     });
     }

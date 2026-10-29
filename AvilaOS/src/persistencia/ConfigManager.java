@@ -40,6 +40,43 @@ public class ConfigManager {
                 Buffer b = cluster.getBuffers().obtener(i);
                 bw.write("BUFFER;" + b.getIdBuffer() + ";" + b.getCapacidad() + ";" + b.getIdComputadorAnfitrion() + "\n");
             }
+
+            bw.write("#PROCESOS;nombre;tipo;prioridad;ram;deadline;computadorDestino;instruccionesOBuffer;frecuencia;elementos\n");
+            for (int i = 0; i < cluster.getComputadores().getTamano(); i++) {
+                Computador c = cluster.getComputadores().obtener(i);
+                escribirProcesosDeCola(bw, c.getColaNuevos().getListaInterna(), c.getIdComputador());
+                escribirProcesosDeCola(bw, c.getColaListos(), c.getIdComputador());
+                escribirProcesosDeCola(bw, c.getColaBloqueados(), c.getIdComputador());
+                if (c.getProcesoEnCPU() != null) {
+                    avilaos.estructuras.ListaEnlazada<Proceso> enCpu = new avilaos.estructuras.ListaEnlazada<>();
+                    enCpu.agregarAlFinal(c.getProcesoEnCPU());
+                    escribirProcesosDeCola(bw, enCpu, c.getIdComputador());
+                }
+            }
+        }
+    }
+
+    private static void escribirProcesosDeCola(BufferedWriter bw, avilaos.estructuras.ListaEnlazada<Proceso> lista, int idComputadorDestino) throws IOException {
+        for (int i = 0; i < lista.getTamano(); i++) {
+            Proceso p = lista.obtener(i);
+            StringBuilder sb = new StringBuilder();
+            sb.append("PROCESO;")
+              .append(p.getNombre()).append(";")
+              .append(p.getTipo().name()).append(";")
+              .append(p.getPrioridad()).append(";")
+              .append(p.getMemoriaRequerida()).append(";")
+              .append(p.getDeadline()).append(";")
+              .append(idComputadorDestino).append(";");
+
+            if (p.getTipo() == TipoProceso.PRODUCTOR || p.getTipo() == TipoProceso.CONSUMIDOR) {
+                sb.append(p.getIdBuffer()).append(";")
+                  .append(p.getFrecuenciaCiclos()).append(";")
+                  .append(p.getElementosRequeridos());
+            } else {
+                sb.append(p.getInstruccionesTotales());
+            }
+
+            bw.write(sb.toString() + "\n");
         }
     }
 
@@ -106,3 +143,6 @@ public class ConfigManager {
         }
     }
 }
+
+
+
