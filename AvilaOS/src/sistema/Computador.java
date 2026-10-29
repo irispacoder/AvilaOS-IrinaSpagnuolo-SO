@@ -194,6 +194,7 @@ public class Computador implements Runnable, IClockListener{
             procesoEnCPU.decrementarDeadline();
         }
         colaListos.paraCadaElemento(Proceso::decrementarDeadline);
+        colaBloqueados.paraCadaElemento(Proceso::decrementarDeadline);
 
         colaBloqueados.paraCadaElemento(p -> {
             if (p.getMotivoBloqueo() == MotivoBloqueo.ESPERA_SEMAFORO) {
@@ -312,6 +313,8 @@ public class Computador implements Runnable, IClockListener{
                         Proceso desb = resPaso.getProcesoDesbloqueado();
                         if (desb.getPasoBufferActual() == PasoBuffer.WAIT_CONTEO) {
                             desb.setPasoBufferActual(PasoBuffer.WAIT_MUTEX);
+                        }else if (desb.getPasoBufferActual() == PasoBuffer.WAIT_MUTEX) {
+                            desb.setPasoBufferActual(PasoBuffer.OPERACION); 
                         }
                         
                         Computador compDueno = clusterManager.buscarComputadorPorId(resPaso.getProcesoDesbloqueado().getComputadorAsignado());
