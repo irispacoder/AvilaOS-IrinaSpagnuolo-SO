@@ -6,4 +6,11 @@ El sistema abstrae la gestión de procesos monohilo mediante un reloj global uni
 
 Se utilizaron las librerias JFreeChart, que aparecen en repo como documentos añadidos.
 
+Para ejercutarlo:
+- Abrir el proyecto con NetBeans JDK25
+- Asegurarse de tener añadidas las librerias de lo contario no funcionara
+- Darle "Run" para empezar la simulación.
+
 Irina Spagnuolo 
+
+Sistemas Operativos 2627-1
